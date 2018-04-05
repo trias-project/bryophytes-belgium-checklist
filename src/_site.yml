@@ -1,0 +1,16 @@
+name: "Checklist of the Bryophytes of Belgium"
+output_dir: "../docs"
+include: ["static/"]
+navbar:
+  title: "bryophytes-checklist"
+  left:
+    - text: "Darwin Core mapping"
+      href: dwc_checklist.html
+  right:
+    - icon: fa-github fa-lg
+      href: https://github.com/trias-project/bryophytes-checklist
+output:
+  html_document:
+    theme: yeti
+    df_print: paged
+    css: "static/css/trias.css"
