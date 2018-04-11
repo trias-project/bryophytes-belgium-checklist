@@ -2,13 +2,13 @@ name: "Checklist of the Bryophytes of Belgium"
 output_dir: "../docs"
 include: ["static/"]
 navbar:
-  title: "bryophytes-checklist"
+  title: "bryophytes-belgium-checklist"
   left:
     - text: "Darwin Core mapping"
-      href: dwc_checklist.html
+      href: dwc_mapping.html
   right:
     - icon: fa-github fa-lg
-      href: https://github.com/trias-project/bryophytes-checklist
+      href: https://github.com/trias-project/bryophytes-belgium-checklist
 output:
   html_document:
     theme: yeti
