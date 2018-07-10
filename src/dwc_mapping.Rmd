@@ -1,0 +1,173 @@
+---
+title: "Darwin Core mapping"
+subtitle: "For: Bryophyte checklist and European red list of the Brussels-Capital Region, Flanders and Wallonia (Belgium)"
+author:
+- Lien Reyserhove
+- Peter Desmet
+- Quentin Groom
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+---
+
+This document describes how we map the checklist data to Darwin Core. The source file for this document can be found [here](https://github.com/trias-project/rinse-pathways-checklist/blob/master/src/dwc_mapping.Rmd).
+
+# Setup
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+Set locale (so we use UTF-8 character encoding):
+
+```{r}
+# This works on Mac OS X, might not work on other OS
+Sys.setlocale("LC_CTYPE", "en_US.UTF-8")
+```
+
+Load libraries:
+
+```{r}
+library(tidyverse) # To transform data
+library(magrittr)  # For %<>% pipes
+library(janitor)   # To clean input data
+library(readxl)    # To read Excel files
+library(digest)    # To generate hashes
+library(rgbif)     # To parse names
+```
+
+Set file paths (all paths should be relative to this script):
+ 
+```{r}
+# Raw files:
+raw_data_file = "../data/raw/bryophytes.xlsx"
+
+# Processed files:
+dwc_taxon_file = "../data/processed/taxon.csv"
+dwc_distribution_file = "../data/processed/distribution.csv"
+dwc_description_file = "../data/processed/description.csv"
+```
+
+# Read and pre-process raw data
+
+Create a data frame `raw_data` from the source data:
+
+```{r}
+raw_data <- read_excel(path = raw_data_file) 
+```
+
+Clean the data somewhat: remove empty rows if present and clean names:
+
+```{r}
+raw_data %<>% 
+  remove_empty("rows") %<>%
+  clean_names()
+```
+
+## Generate taxonID
+
+To uniquely identify a taxon in the taxon core and reference taxa in the extensions, we need a `taxonID`. Since we need it in all generated files, we generate it here in the raw data frame. It is a combination of `dataset-shortname:taxon:` and a hash based on the scientific name. As long as the scientific name doesn't change, the ID will be stable. S
+
+Generate `taxonID`:
+
+```{r}
+# Vectorize the digest function (the digest() function isn't vectorized. So if you pass in a vector, you get one value for the whole vector rather than a digest for each element of the vector):
+vdigest <- Vectorize(digest)
+
+# Generate taxonID:
+raw_data %<>% mutate(taxonID = paste("bryophytes-belgium-checklist", "taxon", vdigest (taxon, algo = "md5"), sep = ":"))
+```
+
+## Further pre-processing
+
+Add prefix `raw_` to all column names to avoid name clashes with Darwin Core terms:
+
+```{r}
+colnames(raw_data) <- paste0("raw_", colnames(raw_data))
+```
+
+Preview data:
+
+```{r}
+raw_data %>% head()
+```
+
+# Create taxon core
+
+```{r start_taxon}
+taxon <- raw_data
+```
+
+## Term mapping
+
+Map the data to [Darwin Core Taxon](http://rs.gbif.org/core/dwc_taxon_2015-04-24.xml).
+
+### language
+
+```{r}
+taxon %<>% mutate(language = "en")
+```
+
+### license
+
+```{r}
+taxon %<>% mutate(license = "http://creativecommons.org/publicdomain/zero/1.0/") 
+```
+
+### rightsHolder
+
+```{r}
+taxon %<>% mutate(rightsHolder = "Botanical Garden Meise")
+```
+
+### datasetID
+
+```{r}
+taxon %<>% mutate(datasetID = "")
+```
+
+### institutionCode
+
+```{r}
+taxon %<>% mutate(institutionCode = "BGM") 
+```
+
+### datasetName
+
+```{r}
+taxon %<>% mutate(datasetName = "Bryophyte checklist and European red list of the Brussels-Capital Region, Flanders and Wallonia (Belgium)") 
+```
+
+### taxonID	
+
+```{r}
+taxon %<>% mutate(taxonID = raw_taxonID) 
+```
+
+### kingdom
+
+```{r}
+taxon %<>% mutate(kingdom = "Plantae") 
+```
+
+### phylum
+
+```{r}
+taxon %<>% mutate(phylum = raw_division) 
+```
+
+### taxonRank
+
+Almost all taxa are species, only `Tortella inclinata (R.Hedw.) Limpr. var. densa` is a variety:
+
+
+```{r}
+
+```
+
+### nomenclaturalCode
+
