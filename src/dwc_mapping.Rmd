@@ -148,6 +148,12 @@ taxon %<>% mutate(datasetName = "Bryophyte checklist and European red list of th
 taxon %<>% mutate(taxonID = raw_taxonID) 
 ```
 
+### scientificName
+
+```{r}
+taxon %<>% mutate(scientificName = raw_taxon) 
+```
+
 ### kingdom
 
 ```{r}
@@ -164,10 +170,148 @@ taxon %<>% mutate(phylum = raw_division)
 
 Almost all taxa are species, only `Tortella inclinata (R.Hedw.) Limpr. var. densa` is a variety:
 
-
 ```{r}
-
+taxon %<>% mutate(taxonRank = case_when(
+  raw_taxon == "Tortella inclinata (R.Hedw.) Limpr. var. densa" ~ "variety",
+  TRUE ~ "species")) 
 ```
 
 ### nomenclaturalCode
+
+```{r}
+taxon %<>% mutate(nomenclaturalCode = "ICN")  
+```
+
+## Post-processing
+
+Remove the original columns:
+
+```{r}
+taxon %<>% select(-starts_with("raw_"))
+```
+
+Sort on `taxonID`:
+
+```{r}
+taxon %<>% arrange(taxonID)
+```
+
+Preview data:
+
+```{r}
+taxon %>% head()
+```
+
+Save to CSV:
+
+```{r}
+write.csv(taxon, file = dwc_taxon_file, na = "", row.names = FALSE, fileEncoding = "UTF-8")
+```
+
+# Create distribution extension
+
+```{r start_distribution}
+distribution <- raw_data
+```
+
+## Pre-processing
+
+Before we start mapping the distribution extensions, we focus on two terms: `occurrenceStatus` and  `eventDate`. This is because information on the occurrences is given for the **regions**, while date information is given for **Belgium** as a whole. Some transformations and clarifications are needed.
+
+The checklist contains minimal presence information (`1`,`?` or `0`) for the three regions in Belgium: Flanders, Wallonia and the Brussels-Capital Region, contained in `raw_flanders`, `raw_wallonia` and `raw_brussels` respectively. Information regarding the first/last recorded observation applies to the distribution in Belgium as a whole. Both national and regional information is required in the checklist. In the `distribution.csv`, we will first provide `occurrenceStatus` and `eventDate`` on a **national level**, followed by specific information for the **regions**. 
+
+For this, we use the following principles:
+
+1. When a species is present in _only one region_, we can assume `eventDate` relates to that specific region. In this case, we can keep lines for Belgium and for the specific region populated with these variables.
+
+2. When a species is present in _more than one_ region, it is impossible to extrapolate the date information for the regions. In this case, we decided to provide `occurrenceStatus` for the regional information, and specify dates only for Belgium.  
+
+Thus, we need to specify when a species is present in only one of the regions.
+
+We generate 4 new columns: `Flanders`, `Brussels`,`Wallonia` and `Belgium`. 
+The content of these columns refers to the specific presence status of a species on a regional or national level.
+`S` if present in a single region or in Belgium, `?` if presence uncertain, `NA` if absent and `M` if present in multiple regions.
+
+This should look like this:
+```{r echo=FALSE}
+as.data.frame(matrix(
+  c(
+    "0", "0", "1", NA, NA, "S", "S",
+    "0", "1", "0", NA, "S", NA, "S", 
+    "0", "1", "1", NA, "M", "M", "S",
+    "1", "?", "?", "S", "?", "?", "S",
+    "1", "0", "0", "S", NA, NA, "S",
+    "1", "0", "1", "M", NA, "M", "S",
+    "1", "1", "0", "M", "M", NA, "S",
+    "1", "1", "1", "M", "M", "M", "S"
+  ),
+  ncol = 7,
+  byrow = TRUE,
+  dimnames = list(c(1:8), c(
+    "raw_flanders",
+    "raw_wallonia", 
+    "raw_brussels", 
+    "Flanders", 
+    "Wallonia", 
+    "Brussels",
+    "Belgium"
+  ))
+))
+```
+
+We translate this to the distribution extension:
+
+Flanders:
+
+```{r}
+distribution %<>% mutate(Flanders = case_when(
+  raw_flanders == "1" & 
+    (raw_wallonia == "?" | raw_wallonia == "0") &
+    (raw_brussels == "?" | raw_brussels == "0") ~ "S",
+  raw_flanders == "0" ~ "NA",
+  TRUE ~ "M"))
+```
+
+Wallonia:
+
+```{r}
+distribution %<>% mutate(Wallonia = case_when(
+  raw_wallonia == "1" &
+    raw_flanders == "0" &
+    raw_brussels == "0" ~ "S",
+  raw_wallonia == "?" ~"?",
+  raw_wallonia == "0" ~ "NA",
+  TRUE ~ "M"
+))
+```
+
+Brussels:
+
+```{r}
+distribution %<>% mutate(Brussels = case_when(
+  raw_brussels == "1" &
+    raw_flanders == "0" &
+    raw_wallonia == "0" ~ "S",
+  raw_brussels == "?" ~ "?",
+  raw_brussels == "0" ~ "NA",
+  TRUE ~ "M"
+)) 
+```
+
+Belgium:
+
+```{r}
+distribution %<>% mutate(Belgium = "S") 
+```
+
+Summary of the previous action:
+
+```{r}
+distribution %>% select (raw_flanders, raw_wallonia, raw_brussels, Flanders, Wallonia, Brussels, Belgium) %>%
+  group_by_all() %>%
+  summarize(records = n()) %>%
+  arrange(Flanders, Wallonia, Brussels)
+```
+
+
 
