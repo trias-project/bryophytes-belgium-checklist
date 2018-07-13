@@ -313,5 +313,33 @@ distribution %>% select (raw_flanders, raw_wallonia, raw_brussels, Flanders, Wal
   arrange(Flanders, Wallonia, Brussels)
 ```
 
+One line should represent the presence information of a species in one region or Belgium. We need to transform `raw_data` from a wide to a long table (i.e. create a `key` and `value` column):
 
+```{r}
+distribution %<>% gather(
+  key, value,
+  Flanders, Wallonia, Brussels, Belgium,
+  convert = FALSE
+) 
+```
+
+Rename `key` and `value`:
+
+```{r}
+distribution %<>% rename ("location" = "key", "presence" = "value")
+```
+
+Remove species for which we lack presence information (i.e. `presence` = `NA``):
+
+```{r}
+distribution %<>% filter (!presence == "NA")
+```
+
+### Clean date information
+
+Inspect `raw_date_from`: 
+
+```{r}
+distribution %>% distinct(raw_date_from)
+```
 
