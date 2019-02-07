@@ -356,6 +356,11 @@ Rename `key` and `value`:
 distribution %<>% rename ("location" = "key", "presence" = "value")
 ```
 
+Rename content of `location` (i.e. remove prefix):
+
+REGULAR EXPRESSION!!
+
+
 Remove species for which we lack presence information (i.e. `presence` = `NA``):
 
 ```{r}
