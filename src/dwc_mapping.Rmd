@@ -8,10 +8,16 @@ author:
 date: "`r Sys.Date()`"
 output:
   html_document:
-    toc: true
+    df_print: paged
+    number_sections: yes
+    toc: yes
     toc_depth: 3
-    toc_float: true
-    number_sections: true
+    toc_float: yes
+#  pdf_document:
+#    df_print: kable
+#    number_sections: yes
+#    toc: yes
+#    toc_depth: 3
 ---
 
 This document describes how we map the checklist data to Darwin Core. The source file for this document can be found [here](https://github.com/trias-project/rinse-pathways-checklist/blob/master/src/dwc_mapping.Rmd).
@@ -22,84 +28,76 @@ This document describes how we map the checklist data to Darwin Core. The source
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-Set locale (so we use UTF-8 character encoding):
-
-```{r}
-# This works on Mac OS X, might not work on other OS
-Sys.setlocale("LC_CTYPE", "en_US.UTF-8")
-```
-
 Load libraries:
 
 ```{r}
 library(tidyverse) # To transform data
 library(magrittr)  # For %<>% pipes
+library(here)           # To find files
 library(janitor)   # To clean input data
 library(readxl)    # To read Excel files
 library(digest)    # To generate hashes
 library(rgbif)     # To parse names
 ```
 
-Set file paths (all paths should be relative to this script):
- 
-```{r}
-# Raw files:
-raw_data_file = "../data/raw/bryophytes.xlsx"
+# Read source data
 
-# Processed files:
-dwc_taxon_file = "../data/processed/taxon.csv"
-dwc_distribution_file = "../data/processed/distribution.csv"
-dwc_description_file = "../data/processed/description.csv"
-```
-
-# Read and pre-process raw data
-
-Create a data frame `raw_data` from the source data:
+Create a data frame `input_data` from the source data:
 
 ```{r}
-raw_data <- read_excel(path = raw_data_file) 
-```
-
-Clean the data somewhat: remove empty rows if present and clean names:
-
-```{r}
-raw_data %<>% 
-  remove_empty("rows") %<>%
-  clean_names()
-```
-
-## Generate taxonID
-
-To uniquely identify a taxon in the taxon core and reference taxa in the extensions, we need a `taxonID`. Since we need it in all generated files, we generate it here in the raw data frame. It is a combination of `dataset-shortname:taxon:` and a hash based on the scientific name. As long as the scientific name doesn't change, the ID will be stable. S
-
-Generate `taxonID`:
-
-```{r}
-# Vectorize the digest function (the digest() function isn't vectorized. So if you pass in a vector, you get one value for the whole vector rather than a digest for each element of the vector):
-vdigest <- Vectorize(digest)
-
-# Generate taxonID:
-raw_data %<>% mutate(taxonID = paste("bryophytes-belgium-checklist", "taxon", vdigest (taxon, algo = "md5"), sep = ":"))
-```
-
-## Further pre-processing
-
-Add prefix `raw_` to all column names to avoid name clashes with Darwin Core terms:
-
-```{r}
-colnames(raw_data) <- paste0("raw_", colnames(raw_data))
+input_data <- read_excel(path = here("data", "raw", "bryophytes.xlsx")) 
 ```
 
 Preview data:
 
 ```{r}
-raw_data %>% head()
+input_data %>% head(n = 5)
 ```
 
-# Create taxon core
+# Process source data
 
-```{r start_taxon}
-taxon <- raw_data
+## Tidy data
+
+Clean data somewhat:
+
+```{r}
+input_data %<>% 
+  remove_empty("rows") %<>%
+  clean_names()
+```
+
+## Scientific names
+
+Use the [GBIF nameparser](https://www.gbif.org/tools/name-parser) to retrieve nomenclatural information for the scientific names in the checklist:
+
+## Taxon IDs
+
+To link taxa with information in the extension(s), each taxon needs a unique and relatively stable `taxonID`. Here we create one in the form of `dataset_shortname:taxon:hash`, where `hash` is unique code based on scientific name (that will remain the same as long as scientific name remain the same):
+
+```{r}
+vdigest <- Vectorize(digest) # Vectorize digest function to work with vectors
+input_data %<>% mutate(taxon_id = paste(
+  "bryophytes-belgium-checklist", 
+  "taxon",
+  vdigest(taxon, algo = "md5"),
+  sep = ":"
+))
+```
+
+Preview data:
+
+```{r}
+input_data %>% head()
+```
+
+# Taxon core
+
+## Pre-processing
+
+Create a dataframe with unique taxa only (ignoring multiple distribution rows):
+
+```{r}
+taxon <- input_data %>% distinct(taxon_id, .keep_all = TRUE)
 ```
 
 ## Term mapping
@@ -109,91 +107,120 @@ Map the data to [Darwin Core Taxon](http://rs.gbif.org/core/dwc_taxon_2015-04-24
 ### language
 
 ```{r}
-taxon %<>% mutate(language = "en")
+taxon %<>% mutate(dwc_language = "en")
 ```
 
 ### license
 
 ```{r}
-taxon %<>% mutate(license = "http://creativecommons.org/publicdomain/zero/1.0/") 
+taxon %<>% mutate(dwc_license = "http://creativecommons.org/publicdomain/zero/1.0/") 
 ```
 
 ### rightsHolder
 
 ```{r}
-taxon %<>% mutate(rightsHolder = "Botanical Garden Meise")
+taxon %<>% mutate(dwc_rightsHolder = "Botanical Garden Meise")
 ```
 
 ### datasetID
 
 ```{r}
-taxon %<>% mutate(datasetID = "")
+taxon %<>% mutate(dwc_datasetID = "")
 ```
 
 ### institutionCode
 
 ```{r}
-taxon %<>% mutate(institutionCode = "BGM") 
+taxon %<>% mutate(dwc_institutionCode = "BGM") 
 ```
 
 ### datasetName
 
 ```{r}
-taxon %<>% mutate(datasetName = "Bryophyte checklist and European red list of the Brussels-Capital Region, Flanders and Wallonia (Belgium)") 
+taxon %<>% mutate(dwc_datasetName = "Bryophyte checklist and European red list of the Brussels-Capital Region, Flanders and Wallonia (Belgium)") 
 ```
 
 ### taxonID	
 
 ```{r}
-taxon %<>% mutate(taxonID = raw_taxonID) 
+taxon %<>% mutate(dwc_taxonID = taxon_id) 
 ```
 
 ### scientificName
 
 ```{r}
-taxon %<>% mutate(scientificName = raw_taxon) 
+taxon %<>% mutate(dwc_scientificName = taxon) 
 ```
 
 ### kingdom
 
 ```{r}
-taxon %<>% mutate(kingdom = "Plantae") 
+taxon %<>% mutate(dwc_kingdom = "Plantae") 
 ```
 
 ### phylum
 
 ```{r}
-taxon %<>% mutate(phylum = raw_division) 
+taxon %<>% mutate(dwc_phylum = division) 
 ```
 
 ### taxonRank
 
-Almost all taxa are species, only `Tortella inclinata (R.Hedw.) Limpr. var. densa` is a variety:
+The nameparser function provided by rgbif returns information about the rank of the taxon (in `rankmarker`). We extract this information and join this information with our checklist. 
+
+Extract rankmarker information:
 
 ```{r}
-taxon %<>% mutate(taxonRank = case_when(
-  raw_taxon == "Tortella inclinata (R.Hedw.) Limpr. var. densa" ~ "variety",
-  TRUE ~ "species")) 
+parsed_names <- input_data %>%
+  distinct(taxon) %>%
+  pull() %>% # Create vector from dataframe
+  parsenames() %>% # An rgbif function
+  select(scientificname, rankmarker)
+```
+
+Join this information with `taxon`:
+
+```{r}
+taxon %<>% left_join(parsed_names,
+  by = c("taxon" = "scientificname"))
+```
+
+Show unique return for `rankmarker`:
+
+```{r}
+taxon %>% distinct(rankmarker)
+```
+
+Recode values:
+
+```{r}
+taxon %<>% mutate(dwc_taxonRank = recode(rankmarker,
+  "infrasp."  = "infraspecificname",
+  "sp."       = "species",
+  "var."      = "variety",
+  .default    = "",
+  .missing    = ""
+))
 ```
 
 ### nomenclaturalCode
 
 ```{r}
-taxon %<>% mutate(nomenclaturalCode = "ICN")  
+taxon %<>% mutate(dwc_nomenclaturalCode = "ICN")  
 ```
 
 ## Post-processing
 
-Remove the original columns:
+Only keep the Darwin Core columns:
 
 ```{r}
-taxon %<>% select(-starts_with("raw_"))
+taxon %<>% select(starts_with("dwc_"))
 ```
 
-Sort on `taxonID`:
+Drop the `dwc_` prefix:
 
 ```{r}
-taxon %<>% arrange(taxonID)
+colnames(taxon) <- str_replace(colnames(taxon), "dwc_", "")
 ```
 
 Preview data:
@@ -205,20 +232,20 @@ taxon %>% head()
 Save to CSV:
 
 ```{r}
-write.csv(taxon, file = dwc_taxon_file, na = "", row.names = FALSE, fileEncoding = "UTF-8")
+write_csv(taxon, here("data", "processed", "taxon.csv"), na = "")
 ```
 
 # Create distribution extension
 
 ```{r start_distribution}
-distribution <- raw_data
+distribution <- input_data
 ```
 
 ## Pre-processing
 
 Before we start mapping the distribution extensions, we focus on two terms: `occurrenceStatus` and  `eventDate`. This is because information on the occurrences is given for the **regions**, while date information is given for **Belgium** as a whole. Some transformations and clarifications are needed.
 
-The checklist contains minimal presence information (`1`,`?` or `0`) for the three regions in Belgium: Flanders, Wallonia and the Brussels-Capital Region, contained in `raw_flanders`, `raw_wallonia` and `raw_brussels` respectively. Information regarding the first/last recorded observation applies to the distribution in Belgium as a whole. Both national and regional information is required in the checklist. In the `distribution.csv`, we will first provide `occurrenceStatus` and `eventDate`` on a **national level**, followed by specific information for the **regions**. 
+The checklist contains minimal presence information (`1`,`?` or `0`) for the three regions in Belgium: Flanders, Wallonia and the Brussels-Capital Region. Information regarding the first/last recorded observation applies to the distribution in Belgium as a whole. Both national and regional information is required in the checklist. In the `distribution.csv`, we will first provide `occurrenceStatus` and `eventDate`` on a **national level**, followed by specific information for the **regions**. 
 
 For this, we use the following principles:
 
@@ -228,7 +255,7 @@ For this, we use the following principles:
 
 Thus, we need to specify when a species is present in only one of the regions.
 
-We generate 4 new columns: `Flanders`, `Brussels`,`Wallonia` and `Belgium`. 
+We generate 4 new columns: `presence_flanders`, `presence_brussels`,`presence_wallonia` and `presence_belgium`. 
 The content of these columns refers to the specific presence status of a species on a regional or national level.
 `S` if present in a single region or in Belgium, `?` if presence uncertain, `NA` if absent and `M` if present in multiple regions.
 
@@ -248,13 +275,13 @@ as.data.frame(matrix(
   ncol = 7,
   byrow = TRUE,
   dimnames = list(c(1:8), c(
-    "raw_flanders",
-    "raw_wallonia", 
-    "raw_brussels", 
-    "Flanders", 
-    "Wallonia", 
-    "Brussels",
-    "Belgium"
+    "flanders",
+    "wallonia", 
+    "brussels", 
+    "presence_flanders", 
+    "presence_wallonia", 
+    "presence_brussels",
+    "presence_belgium"
   ))
 ))
 ```
@@ -264,23 +291,23 @@ We translate this to the distribution extension:
 Flanders:
 
 ```{r}
-distribution %<>% mutate(Flanders = case_when(
-  raw_flanders == "1" & 
-    (raw_wallonia == "?" | raw_wallonia == "0") &
-    (raw_brussels == "?" | raw_brussels == "0") ~ "S",
-  raw_flanders == "0" ~ "NA",
+distribution %<>% mutate(presence_flanders = case_when(
+  flanders == "1" & 
+    (wallonia == "?" | wallonia == "0") &
+    (brussels == "?" | brussels == "0") ~ "S",
+  flanders == "0" ~ "NA",
   TRUE ~ "M"))
 ```
 
 Wallonia:
 
 ```{r}
-distribution %<>% mutate(Wallonia = case_when(
-  raw_wallonia == "1" &
-    raw_flanders == "0" &
-    raw_brussels == "0" ~ "S",
-  raw_wallonia == "?" ~"?",
-  raw_wallonia == "0" ~ "NA",
+distribution %<>% mutate(presence_wallonia = case_when(
+  wallonia == "1" &
+    flanders == "0" &
+    brussels == "0" ~ "S",
+  wallonia == "?" ~"?",
+  wallonia == "0" ~ "NA",
   TRUE ~ "M"
 ))
 ```
@@ -288,12 +315,12 @@ distribution %<>% mutate(Wallonia = case_when(
 Brussels:
 
 ```{r}
-distribution %<>% mutate(Brussels = case_when(
-  raw_brussels == "1" &
-    raw_flanders == "0" &
-    raw_wallonia == "0" ~ "S",
-  raw_brussels == "?" ~ "?",
-  raw_brussels == "0" ~ "NA",
+distribution %<>% mutate(presence_brussels = case_when(
+  brussels == "1" &
+    flanders == "0" &
+    wallonia == "0" ~ "S",
+  brussels == "?" ~ "?",
+  brussels == "0" ~ "NA",
   TRUE ~ "M"
 )) 
 ```
@@ -301,24 +328,24 @@ distribution %<>% mutate(Brussels = case_when(
 Belgium:
 
 ```{r}
-distribution %<>% mutate(Belgium = "S") 
+distribution %<>% mutate(presence_belgium = "S") 
 ```
 
 Summary of the previous action:
 
 ```{r}
-distribution %>% select (raw_flanders, raw_wallonia, raw_brussels, Flanders, Wallonia, Brussels, Belgium) %>%
+distribution %>% select (flanders, wallonia, brussels, presence_flanders, presence_wallonia, presence_brussels, presence_belgium) %>%
   group_by_all() %>%
   summarize(records = n()) %>%
-  arrange(Flanders, Wallonia, Brussels)
+  arrange(presence_flanders, presence_wallonia, presence_brussels)
 ```
 
-One line should represent the presence information of a species in one region or Belgium. We need to transform `raw_data` from a wide to a long table (i.e. create a `key` and `value` column):
+One line should represent the presence information of a species in one region or Belgium. We need to transform `distribution` from a wide to a long table (i.e. create a `key` and `value` column):
 
 ```{r}
 distribution %<>% gather(
   key, value,
-  Flanders, Wallonia, Brussels, Belgium,
+  presence_flanders, presence_wallonia, presence_brussels, presence_belgium,
   convert = FALSE
 ) 
 ```
@@ -337,9 +364,10 @@ distribution %<>% filter (!presence == "NA")
 
 ### Clean date information
 
-Inspect `raw_date_from`: 
+Inspect `date_from`: 
 
 ```{r}
-distribution %>% distinct(raw_date_from)
+distribution %>% distinct(date_from)
 ```
 
+Clean `
