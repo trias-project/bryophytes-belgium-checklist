@@ -364,10 +364,89 @@ distribution %<>% filter (!presence == "NA")
 
 ### Clean date information
 
-Inspect `date_from`: 
+Inspect date information: 
 
 ```{r}
-distribution %>% distinct(date_from)
+distribution %>% 
+  group_by(origin, date_from, date_to) %>%
+  summarize(records = n())
 ```
 
-Clean `
+For species with date information `extinct`, we decided to leave date information empty. 
+For species with `date_from` = `absent`, we decided to set this value to `2007`, i.e. the same as `date_to`, as the species was cryptogenic (`origin`) at that time point. We recode and clean the date information.
+
+```{r}
+distribution %<>% mutate(date_from = recode(date_from,
+  "absent"  = "2007",
+  "c. 1900" = "1900",
+  "extinct" = "",
+  .missing = ""
+))
+```
+
+
+```{r}
+distribution %<>% mutate(date_to = recode(date_to,
+  "<1900" = "1900",
+  "extinct" = "",
+  .missing = ""
+))
+```
+
+## Term mapping
+
+Map the data to [Species Distribution](http://rs.gbif.org/extension/gbif/1.0/distribution.xml).
+
+### taxonID
+
+```{r}
+distribution %<>% mutate(dwc_taxonID = taxon_id)
+```
+
+### locality
+
+```{r}
+distribution %<>% mutate(locality = case_when (
+  location == "Belgium" ~ "Belgium",
+  location == "Flanders" ~ "Flemish Region",
+  location == "Wallonia" ~ "Walloon Region",
+  location == "Brussels" ~ "Brussels-Capital Region"))
+```
+### countryCode
+
+
+### occurrenceStatus
+
+### threatStatus
+
+### source
+
+### occurrenceRemarks
+
+## Post-processing
+
+Only keep the Darwin Core columns:
+
+```{r}
+distribution %<>% select(starts_with("dwc_"))
+```
+
+Drop the `dwc_` prefix:
+
+```{r}
+colnames(distribution) <- str_replace(colnames(distribution), "dwc_", "")
+```
+
+Preview data:
+
+```{r}
+distribution %>% head()
+```
+
+Save to CSV:
+
+```{r}
+write_csv(distribution, here("data", "processed", "distribution.csv"), na = "")
+```
+
+
